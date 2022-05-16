@@ -26,7 +26,7 @@ func main() {
 	}
 	defer conn.Close()
 
-	tick := time.NewTicker(100 * time.Millisecond)
+	tick := time.NewTicker(10 * time.Millisecond)
 
 	for !quit {
 		select {

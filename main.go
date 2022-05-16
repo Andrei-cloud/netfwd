@@ -80,4 +80,5 @@ func main() {
 	s := <-interrupt
 	log.Printf("received signal: %s", s.String())
 	cancel()
+	l.Close()
 }
