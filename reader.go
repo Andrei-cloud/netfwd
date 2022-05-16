@@ -1,30 +1,40 @@
 package main
 
 import (
-	"bufio"
-	"io"
+	"fmt"
+	"log"
+	"net"
 	"strconv"
 )
 
-func Read(c *bufio.Reader) ([]byte, error) {
+func Read(conn net.Conn) ([]byte, error) {
 	var (
-		size, buf []byte
-		err       error
+		err error
+		l   int
 	)
-	size, err = c.Peek(lengthSize)
-	if err != nil {
-		return nil, err
+
+	netLen := make([]byte, 5)
+	//conn.SetReadDeadline(time.Now().Add(time.Second))
+	for {
+		n, err := conn.Read(netLen)
+		if err != nil {
+			return nil, err
+		}
+		if n == 5 {
+			l, err = strconv.Atoi(string(netLen))
+			if err != nil {
+				return nil, fmt.Errorf("invalid msg length received: %w", err)
+			}
+			break
+		}
 	}
 
-	l, err := strconv.Atoi(string(size))
+	buf := make([]byte, l)
+	_, err = conn.Read(buf)
 	if err != nil {
 		return nil, err
 	}
-	buf = make([]byte, lengthSize+l)
-	_, err = io.ReadFull(c, buf[:lengthSize+l])
-	if err != nil {
-		return nil, err
-	}
-
-	return buf, nil
+	data := append(netLen, buf...)
+	log.Println(string(data))
+	return data, nil
 }

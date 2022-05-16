@@ -1,14 +1,13 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"fmt"
 	"io"
 	"log"
+	"net"
 )
 
-func Forward(dest io.ReadWriter, b *[]byte) ([]byte, error) {
+func Forward(dest net.Conn, b *[]byte) ([]byte, error) {
 	var (
 		res []byte
 		err error
@@ -17,14 +16,15 @@ func Forward(dest io.ReadWriter, b *[]byte) ([]byte, error) {
 	if _, err := dest.Write(*b); err != nil {
 		return nil, err
 	}
-	if res, err = Read(bufio.NewReader(dest)); err != nil {
+	if res, err = Read(dest); err != nil {
 		return nil, err
 	}
 	return res, nil
 }
 
-func PassThroughWorker(ctx context.Context, inMsg <-chan []byte, rw io.ReadWriter) chan []byte {
-	outMsg := make(chan []byte, 5)
+func ProxyWorker(ctx context.Context, inMsg <-chan []byte, remote net.Conn) (chan []byte, chan error) {
+	outMsg := make(chan []byte, 10)
+	outErr := make(chan error, 1)
 
 	go func() {
 		defer close(outMsg)
@@ -32,25 +32,54 @@ func PassThroughWorker(ctx context.Context, inMsg <-chan []byte, rw io.ReadWrite
 			select {
 			case message, ok := <-inMsg:
 				if !ok {
-					fmt.Println("inMsg is closed")
+					log.Println("inMsg is closed")
 					return
 				}
-				if res, err := Forward(rw, &message); err != nil {
-					fmt.Println(err)
-					return
+				if res, err := Forward(remote, &message); err != nil {
+					outErr <- err
 				} else {
 					log.Printf("received response: %s\n", string(res))
 					outMsg <- res
 				}
-
 			case <-ctx.Done():
-				fmt.Println("PassThroughWorker: CANCEL RECEIVED")
+				log.Println("ProxyWorker: CANCEL RECEIVED")
 				return
+			default:
 			}
 		}
 	}()
 
-	return outMsg
+	return outMsg, outErr
+}
+
+func APIWorker(ctx context.Context, inMsg <-chan []byte) (chan []byte, chan error) {
+	outMsg := make(chan []byte, 10)
+	outErr := make(chan error, 1)
+
+	go func() {
+		defer close(outMsg)
+		for {
+			select {
+			case message, ok := <-inMsg:
+				if !ok {
+					log.Println("inMsg is closed")
+					return
+				}
+				if res, err := CSNQ(&message); err != nil {
+					outErr <- err
+				} else {
+					log.Printf("received response: %s\n", string(res))
+					outMsg <- res
+				}
+			case <-ctx.Done():
+				log.Println("API Worker: CANCEL RECEIVED")
+				return
+			default:
+			}
+		}
+	}()
+
+	return outMsg, outErr
 }
 
 func SourceSenderWorker(ctx context.Context, inMsg <-chan []byte, w io.Writer) {
@@ -68,6 +97,7 @@ func SourceSenderWorker(ctx context.Context, inMsg <-chan []byte, w io.Writer) {
 		case <-ctx.Done():
 			log.Println("SourceSenderWorker: CANCEL RECEIVED")
 			return
+		default:
 		}
 	}
 }

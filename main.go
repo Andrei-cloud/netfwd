@@ -1,12 +1,8 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"flag"
-	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/url"
@@ -20,138 +16,63 @@ import (
 
 //to minimize cleint coldstart
 var (
-	clientPool   sync.Pool
-	destPtr      *string
-	traceInfoPtr *bool
-	destURL      *url.URL
+	clientPool sync.Pool
+	DestURL    *url.URL
 
-	fwdIn chan []byte
+	ListenAddr  = flag.String("l", ":3000", "address to listen to")
+	DestPtr     = flag.String("d", "http://localhost:3030/", "HTTP destination endpoint")
+	Username    = flag.String("u", "ecms", "user name, mandatory")
+	Password    = flag.String("s", "ecms1", "user password, mandatory")
+	ForwardAddr = flag.String("f", ":9002", "address to passthrough")
 )
 
 const lengthSize int = 5
 
 func main() {
 	var err error
-	portPtr := flag.String("p", "3000", "port to listen to")
-	traceInfoPtr = flag.Bool("t", false, "print trace info")
-	destPtr = flag.String("d", "http://localhost:3030/", "HTTP destination endpoint")
-	username := flag.String("u", "ecms", "user name, mandatory")
-	password := flag.String("s", "ecms1", "user password, mandatory")
-
-	forwardAddr := flag.String("f", ":9002", "address to passthrough")
-
+	ctx, cancel := context.WithCancel(context.Background())
 	flag.Parse()
 
-	if *username == "" || *password == "" {
+	if *Username == "" || *Password == "" {
 		log.Fatal("username and password must be provided")
 	}
 
-	destURL, err = url.Parse(*destPtr)
+	DestURL, err = url.Parse(*DestPtr)
 	if err != nil {
 		log.Fatalln(err)
 	}
-
-	if *destPtr == "" {
-		log.Fatalln("destination http endpoint must be required")
-	}
-
-	// Listen for incoming connections.
-	addr := fmt.Sprintf(":%s", *portPtr)
-
-	l, err := net.Listen("tcp", addr)
-	if err != nil {
-		panic(err)
-	}
-	defer l.Close()
-	host, port, err := net.SplitHostPort(l.Addr().String())
-	if err != nil {
-		panic(err)
-	}
-	log.Printf("Listening on host: %s, port: %s\n", host, port)
 
 	clientPool = sync.Pool{
 		New: func() any {
 			return resty.New().EnableTrace().
 				SetHeader("User-Agent", "go-frwd/0.0.1").
 				SetHeader("Content-Type", "application/json").
-				SetBasicAuth(*username, *password)
+				SetBasicAuth(*Username, *Password)
 		},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	host, port, err = net.SplitHostPort(*forwardAddr)
-	if err != nil {
-		panic(err)
+	if *DestPtr == "" {
+		log.Fatalln("destination http endpoint must be required")
 	}
 
-	remote, err := net.Dial("tcp", *forwardAddr)
+	host, port, err := net.SplitHostPort(*ListenAddr)
 	if err != nil {
-		log.Fatalf("unable to establish remode connection: %v", err)
+		log.Fatalf("incoming listen adress is invalid: %s", err)
 	}
-	log.Printf("Connected to remote host: %s, port: %s\n", host, port)
 
-	fwdIn = make(chan []byte, 5)
-	pt := PassThroughWorker(ctx, fwdIn, remote)
+	_, _, err = net.SplitHostPort(*ForwardAddr)
+	if err != nil {
+		log.Fatalf("forward adress is invalid: %s", err)
+	}
 
-	go func(ctx context.Context) {
-		for {
-			// Listen for an incoming connection
-			conn, err := l.Accept()
-			if err != nil {
-				log.Fatal(err)
-			}
+	l, err := net.Listen("tcp", *ListenAddr)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer l.Close()
+	log.Printf("Listening on host: %s, port: %s\n", host, port)
 
-			log.Println("incomming connection established")
-
-			go func(ctx context.Context, c net.Conn) {
-				defer func() {
-					log.Printf("closing connection with %s\n", c.RemoteAddr().String())
-					c.Close()
-				}()
-
-				out := make(chan []byte, 5)
-				defer close(out)
-				go SourceSenderWorker(ctx, out, c)
-
-				cbuf := bufio.NewReader(c)
-				quit := false
-
-				for !quit {
-					buf, err := Read(cbuf)
-					if err != nil {
-						if err == io.EOF {
-							log.Println("remote connection closed")
-							return
-						}
-						log.Printf("error reading: %s\n", err)
-						return
-					}
-					//log.Printf("message received: %s\n", string(buf))
-
-					if idx := bytes.Index(buf, []byte("CSNQ")); idx < 0 {
-						log.Println("message is not CSNQ, passed through")
-						fwdIn <- buf
-						m := <-pt
-						out <- m
-					} else {
-						buf = buf[lengthSize:]
-						msg := CSNQ(&buf)
-						if msg != nil {
-							out <- *msg
-						}
-					}
-
-					select {
-					case <-ctx.Done():
-						log.Println("cancellation received")
-						quit = true
-					default:
-					}
-				}
-			}(ctx, conn)
-		}
-	}(ctx)
+	go Accepter(ctx, l)
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
