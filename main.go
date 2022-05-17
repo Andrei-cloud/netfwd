@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/url"
@@ -33,36 +35,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	flag.Parse()
 
-	if *Username == "" || *Password == "" {
-		log.Fatal("username and password must be provided")
-	}
-
-	DestURL, err = url.Parse(*DestPtr)
+	err = checkInit()
 	if err != nil {
-		log.Fatalln(err)
-	}
-
-	clientPool = sync.Pool{
-		New: func() any {
-			return resty.New().EnableTrace().
-				SetHeader("User-Agent", "go-frwd/0.0.1").
-				SetHeader("Content-Type", "application/json").
-				SetBasicAuth(*Username, *Password)
-		},
-	}
-
-	if *DestPtr == "" {
-		log.Fatalln("destination http endpoint must be required")
-	}
-
-	host, port, err := net.SplitHostPort(*ListenAddr)
-	if err != nil {
-		log.Fatalf("incoming listen adress is invalid: %s", err)
-	}
-
-	_, _, err = net.SplitHostPort(*ForwardAddr)
-	if err != nil {
-		log.Fatalf("forward adress is invalid: %s", err)
+		log.Fatal(err)
 	}
 
 	l, err := net.Listen("tcp", *ListenAddr)
@@ -70,7 +45,7 @@ func main() {
 		log.Fatalln(err)
 	}
 	defer l.Close()
-	log.Printf("Listening on host: %s, port: %s\n", host, port)
+	log.Printf("Listening on host: %s\n", *ListenAddr)
 
 	go Accepter(ctx, l)
 
@@ -81,4 +56,42 @@ func main() {
 	log.Printf("received signal: %s", s.String())
 	cancel()
 	l.Close()
+}
+
+func checkInit() error {
+	var err error
+
+	if *Username == "" || *Password == "" {
+		return errors.New("username and password must be provided")
+	}
+
+	if *DestPtr == "" {
+		return fmt.Errorf("destination http endpoint must be required")
+	}
+
+	DestURL, err = url.Parse(*DestPtr)
+	if err != nil {
+		return fmt.Errorf("invalid destination handler: %w", err)
+	}
+	_, _, err = net.SplitHostPort(*ListenAddr)
+	if err != nil {
+		return fmt.Errorf("incoming listen adress is invalid: %w", err)
+	}
+
+	_, _, err = net.SplitHostPort(*ForwardAddr)
+	if err != nil {
+		return fmt.Errorf("forward adress is invalid: %w", err)
+	}
+
+	//checks passed init http clients pool
+	clientPool = sync.Pool{
+		New: func() any {
+			return resty.New().EnableTrace().
+				SetHeader("User-Agent", "go-frwd/0.0.1").
+				SetHeader("Content-Type", "application/json").
+				SetBasicAuth(*Username, *Password)
+		},
+	}
+
+	return nil
 }

@@ -38,13 +38,12 @@ func ProxyWorker(ctx context.Context, inMsg <-chan []byte, remote net.Conn) (cha
 				if res, err := Forward(remote, &message); err != nil {
 					outErr <- err
 				} else {
-					log.Printf("received response: %s\n", string(res))
+					//log.Printf("received response: %s\n", string(res))
 					outMsg <- res
 				}
 			case <-ctx.Done():
 				log.Println("ProxyWorker: CANCEL RECEIVED")
 				return
-			default:
 			}
 		}
 	}()
@@ -62,7 +61,7 @@ func APIWorker(ctx context.Context, inMsg <-chan []byte) (chan []byte, chan erro
 			select {
 			case message, ok := <-inMsg:
 				if !ok {
-					log.Println("inMsg is closed")
+					log.Println("API Worker: in channel is closed")
 					return
 				}
 				if res, err := CSNQ(&message); err != nil {
@@ -74,7 +73,6 @@ func APIWorker(ctx context.Context, inMsg <-chan []byte) (chan []byte, chan erro
 			case <-ctx.Done():
 				log.Println("API Worker: CANCEL RECEIVED")
 				return
-			default:
 			}
 		}
 	}()
@@ -87,7 +85,7 @@ func SourceSenderWorker(ctx context.Context, inMsg <-chan []byte, w io.Writer) {
 		select {
 		case message, ok := <-inMsg:
 			if !ok {
-				log.Println("SourceSenderWorker: inMsg is closed")
+				log.Println("SourceSenderWorker: in channel is closed")
 				return
 			}
 			if _, err := w.Write(message); err != nil {
@@ -97,7 +95,6 @@ func SourceSenderWorker(ctx context.Context, inMsg <-chan []byte, w io.Writer) {
 		case <-ctx.Done():
 			log.Println("SourceSenderWorker: CANCEL RECEIVED")
 			return
-		default:
 		}
 	}
 }

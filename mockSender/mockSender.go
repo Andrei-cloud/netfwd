@@ -14,9 +14,6 @@ const lengthSize = 5
 func main() {
 	log.Println("starting sender mock")
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Second))
-	quit := false
-
 	request := []byte(`00264<XML><MessageType>0</MessageType><ProcCode>CRNQ</ProcCode><REFNUM>0220000245250</REFNUM><STAN>0220000245250</STAN><LocalTxnDtTime>2203221157</LocalTxnDtTime><DeliveryChannelCtrlID>ATM</DeliveryChannelCtrlID><PName>ACCOUNTNUMBER</PName><PValue>157336</PValue></XML>`)
 
 	conn, err := net.Dial("tcp", ":3000")
@@ -26,7 +23,10 @@ func main() {
 	}
 	defer conn.Close()
 
-	tick := time.NewTicker(10 * time.Millisecond)
+	tick := time.NewTicker(1 * time.Millisecond)
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Second))
+	quit := false
 
 	for !quit {
 		select {
@@ -42,7 +42,6 @@ func main() {
 				tick.Stop()
 				quit = true
 			}
-		default:
 		}
 	}
 	cancel()

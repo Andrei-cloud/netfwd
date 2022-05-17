@@ -16,7 +16,7 @@ func Accepter(ctx context.Context, l net.Listener) {
 			log.Fatal(err)
 		}
 
-		log.Println("incomming connection established")
+		log.Printf("incomming connection established: %s", conn.RemoteAddr().String())
 
 		go connectionHandler(ctx, conn)
 	}
@@ -70,7 +70,6 @@ func connectionHandler(ctx context.Context, conn net.Conn) {
 				return
 			case <-ctx.Done():
 				return
-			default:
 			}
 		}
 	}()

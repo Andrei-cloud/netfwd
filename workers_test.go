@@ -30,11 +30,11 @@ func setupRemote() context.CancelFunc {
 					c.Close()
 				}()
 
-				n, err := io.Copy(c, c)
+				_, err := io.Copy(c, c)
 				if err != nil {
 					return
 				}
-				log.Printf("echoed %d bytes from %s\n", n, c.RemoteAddr().String())
+				//log.Printf("echoed %d bytes from %s\n", n, c.RemoteAddr().String())
 			}(conn)
 
 			select {
