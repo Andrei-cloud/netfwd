@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,17 +8,15 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-func CSNQ(req *[]byte) ([]byte, error) {
+func CSNQ(client *resty.Client, req *[]byte) (*[]byte, error) {
 	var msg []byte
-	client := clientPool.Get().(*resty.Client)
-	defer clientPool.Put(client)
 
 	request, err := RequestX2J(*req)
 	if err != nil {
 		return nil, fmt.Errorf("CSNQ: %w", err)
 	}
 
-	resp, err := client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).R().
+	resp, err := client.R().
 		SetBody(request).
 		Post(DestURL.String())
 
@@ -31,7 +28,7 @@ func CSNQ(req *[]byte) ([]byte, error) {
 		if response, err := ResponseJ2X(resp.Body()); err == nil {
 			l := []byte(fmt.Sprintf("%05d", len(response)))
 			msg = append(l, response...)
-			return msg, nil
+			return &msg, nil
 		}
 		if err != nil {
 			return nil, fmt.Errorf("CSNQ: %w", err)
