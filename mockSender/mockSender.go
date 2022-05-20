@@ -14,7 +14,7 @@ const lengthSize = 5
 func main() {
 	log.Println("starting sender mock")
 
-	request := []byte(`00264<XML><MessageType>0</MessageType><ProcCode>CRNQ</ProcCode><REFNUM>0220000245250</REFNUM><STAN>0220000245250</STAN><LocalTxnDtTime>2203221157</LocalTxnDtTime><DeliveryChannelCtrlID>ATM</DeliveryChannelCtrlID><PName>ACCOUNTNUMBER</PName><PValue>157336</PValue></XML>`)
+	request := []byte(`00264<XML><MessageType>0</MessageType><ProcCode>CSNQ</ProcCode><REFNUM>0220000245250</REFNUM><STAN>0220000245250</STAN><LocalTxnDtTime>2203221157</LocalTxnDtTime><DeliveryChannelCtrlID>ATM</DeliveryChannelCtrlID><PName>ACCOUNTNUMBER</PName><PValue>157336</PValue></XML>`)
 
 	conn, err := net.Dial("tcp", ":3000")
 	if err != nil {
@@ -25,9 +25,11 @@ func main() {
 
 	tick := time.NewTicker(1 * time.Millisecond)
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(15*time.Second))
 	quit := false
 
+	start := time.Now()
+	counter := 0
 	for !quit {
 		select {
 		case <-ctx.Done():
@@ -35,8 +37,11 @@ func main() {
 			tick.Stop()
 			quit = true
 		case <-tick.C:
-			log.Println("Sending...")
+			log.Print("Sending...")
+			start := time.Now()
 			err := Sender(ctx, conn, request)
+			fmt.Println("received in: ", time.Since(start))
+			counter++
 			if err != nil {
 				log.Println(err)
 				tick.Stop()
@@ -46,6 +51,7 @@ func main() {
 	}
 	cancel()
 	log.Println("quiting sender mock")
+	log.Printf("Run time: %s processed: %d\n", time.Since(start), counter)
 }
 
 func Sender(ctx context.Context, conn net.Conn, request []byte) error {

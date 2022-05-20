@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"log"
 	"net"
+
+	"github.com/go-resty/resty/v2"
 )
 
-func Forward(dest net.Conn, b *[]byte) ([]byte, error) {
+func Forward(dest net.Conn, b *[]byte) (*[]byte, error) {
 	var (
 		res []byte
 		err error
@@ -19,12 +22,11 @@ func Forward(dest net.Conn, b *[]byte) ([]byte, error) {
 	if res, err = Read(dest); err != nil {
 		return nil, err
 	}
-	return res, nil
+	return &res, nil
 }
 
-func ProxyWorker(ctx context.Context, inMsg <-chan []byte, remote net.Conn) (chan []byte, chan error) {
-	outMsg := make(chan []byte, 10)
-	outErr := make(chan error, 1)
+func ProxyWorker(ctx context.Context, inMsg <-chan *[]byte, remote net.Conn, errCh chan error) chan *[]byte {
+	outMsg := make(chan *[]byte, 1)
 
 	go func() {
 		defer close(outMsg)
@@ -35,8 +37,8 @@ func ProxyWorker(ctx context.Context, inMsg <-chan []byte, remote net.Conn) (cha
 					log.Println("inMsg is closed")
 					return
 				}
-				if res, err := Forward(remote, &message); err != nil {
-					outErr <- err
+				if res, err := Forward(remote, message); err != nil {
+					errCh <- err
 				} else {
 					//log.Printf("received response: %s\n", string(res))
 					outMsg <- res
@@ -48,12 +50,17 @@ func ProxyWorker(ctx context.Context, inMsg <-chan []byte, remote net.Conn) (cha
 		}
 	}()
 
-	return outMsg, outErr
+	return outMsg
 }
 
-func APIWorker(ctx context.Context, inMsg <-chan []byte) (chan []byte, chan error) {
-	outMsg := make(chan []byte, 10)
-	outErr := make(chan error, 1)
+func APIWorker(ctx context.Context, inMsg <-chan *[]byte, outErr chan<- error) chan *[]byte {
+	outMsg := make(chan *[]byte, 1)
+
+	client := resty.New().
+		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
+		SetHeader("User-Agent", "go-frwd/0.0.1").
+		SetHeader("Content-Type", "application/json").
+		SetBasicAuth(*Username, *Password)
 
 	go func() {
 		defer close(outMsg)
@@ -64,10 +71,10 @@ func APIWorker(ctx context.Context, inMsg <-chan []byte) (chan []byte, chan erro
 					log.Println("API Worker: in channel is closed")
 					return
 				}
-				if res, err := CSNQ(&message); err != nil {
+				if res, err := CSNQ(client, message); err != nil {
 					outErr <- err
 				} else {
-					log.Printf("received response: %s\n", string(res))
+					//log.Printf("received response: %s\n", string(res))
 					outMsg <- res
 				}
 			case <-ctx.Done():
@@ -77,10 +84,10 @@ func APIWorker(ctx context.Context, inMsg <-chan []byte) (chan []byte, chan erro
 		}
 	}()
 
-	return outMsg, outErr
+	return outMsg
 }
 
-func SourceSenderWorker(ctx context.Context, inMsg <-chan []byte, w io.Writer) {
+func SourceSenderWorker(ctx context.Context, inMsg <-chan *[]byte, w io.Writer, errCh chan<- error) {
 	for {
 		select {
 		case message, ok := <-inMsg:
@@ -88,9 +95,8 @@ func SourceSenderWorker(ctx context.Context, inMsg <-chan []byte, w io.Writer) {
 				log.Println("SourceSenderWorker: in channel is closed")
 				return
 			}
-			if _, err := w.Write(message); err != nil {
-				log.Println("SourceSenderWorker: " + err.Error())
-				return
+			if _, err := w.Write(*message); err != nil {
+				errCh <- err
 			}
 		case <-ctx.Done():
 			log.Println("SourceSenderWorker: CANCEL RECEIVED")

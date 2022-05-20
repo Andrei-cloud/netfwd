@@ -110,13 +110,15 @@ func BenchmarkPassThroughWorker(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			inMsg := make(chan []byte, 1)
-			outMsg, _ := ProxyWorker(ctx, inMsg, remote)
+			inMsg := make(chan *[]byte, 1)
+			errCh := make(chan error)
+			outMsg := ProxyWorker(ctx, inMsg, remote, errCh)
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				inMsg <- tt.msg
+				inMsg <- &tt.msg
 				<-outMsg
+				<-errCh
 			}
 
 			cancel()

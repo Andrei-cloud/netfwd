@@ -10,16 +10,13 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
-
-	"github.com/go-resty/resty/v2"
+	"time"
 )
 
 //to minimize cleint coldstart
 var (
-	clientPool sync.Pool
-	DestURL    *url.URL
+	DestURL *url.URL
 
 	ListenAddr  = flag.String("l", ":3000", "address to listen to")
 	DestPtr     = flag.String("d", "http://localhost:3030/", "HTTP destination endpoint")
@@ -31,6 +28,8 @@ var (
 const lengthSize int = 5
 
 func main() {
+	//defer profile.Start(profile.MemProfile).Stop()
+
 	var err error
 	ctx, cancel := context.WithCancel(context.Background())
 	flag.Parse()
@@ -44,7 +43,6 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	defer l.Close()
 	log.Printf("Listening on host: %s\n", *ListenAddr)
 
 	go Accepter(ctx, l)
@@ -55,7 +53,7 @@ func main() {
 	s := <-interrupt
 	log.Printf("received signal: %s", s.String())
 	cancel()
-	l.Close()
+	time.Sleep(time.Second)
 }
 
 func checkInit() error {
@@ -81,16 +79,6 @@ func checkInit() error {
 	_, _, err = net.SplitHostPort(*ForwardAddr)
 	if err != nil {
 		return fmt.Errorf("forward adress is invalid: %w", err)
-	}
-
-	//checks passed init http clients pool
-	clientPool = sync.Pool{
-		New: func() any {
-			return resty.New().EnableTrace().
-				SetHeader("User-Agent", "go-frwd/0.0.1").
-				SetHeader("Content-Type", "application/json").
-				SetBasicAuth(*Username, *Password)
-		},
 	}
 
 	return nil
