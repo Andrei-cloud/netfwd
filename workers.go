@@ -41,6 +41,7 @@ func ProxyWorker(ctx context.Context, inMsg <-chan *[]byte, remote net.Conn, err
 					errCh <- err
 				} else {
 					//log.Printf("received response: %s\n", string(res))
+					proxyProcessed.Inc()
 					outMsg <- res
 				}
 			case <-ctx.Done():
@@ -75,6 +76,7 @@ func APIWorker(ctx context.Context, inMsg <-chan *[]byte, outErr chan<- error) c
 					outErr <- err
 				} else {
 					//log.Printf("received response: %s\n", string(res))
+					csnqProcessed.Inc()
 					outMsg <- res
 				}
 			case <-ctx.Done():

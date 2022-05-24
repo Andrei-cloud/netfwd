@@ -104,6 +104,8 @@ func connectionHandler(ctx context.Context, conn net.Conn) {
 		}
 		//log.Printf("message received: %s\n", string(buf))
 
+		opsProcessed.Inc()
+
 		if idx := bytes.Index(buf, []byte("CSNQ")); idx < 0 {
 			log.Println("message is not CSNQ, passed through")
 			proxyRequest <- &buf
