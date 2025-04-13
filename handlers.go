@@ -177,11 +177,25 @@ func connectionHandler(ctx context.Context, conn net.Conn) {
 		timesMutex.Lock()
 		if startTime, ok := processingTimes[msgID]; ok {
 			latency := time.Since(startTime)
+
+			// Format latency based on its magnitude for better readability
+			var latencyStr string
+			switch {
+			case latency < time.Microsecond:
+				latencyStr = fmt.Sprintf("%.2f ns", float64(latency.Nanoseconds()))
+			case latency < time.Millisecond:
+				latencyStr = fmt.Sprintf("%.2f µs", float64(latency.Nanoseconds())/1000)
+			case latency < time.Second:
+				latencyStr = fmt.Sprintf("%.2f ms", float64(latency.Nanoseconds())/1000000)
+			default:
+				latencyStr = fmt.Sprintf("%.2f s", latency.Seconds())
+			}
+
 			slog.Info("Message processed",
 				"msgID", msgID,
 				"respMsgID", respMsgID,
-				"latency", latency.String(),
-				"latencyMs", latency.Milliseconds())
+				"latency", latencyStr,
+				"latencyRaw", latency.String())
 			delete(processingTimes, msgID)
 		}
 		timesMutex.Unlock()

@@ -92,6 +92,7 @@ func generateRequest(procCode string) []byte {
 // Sender sends a request and reads the response, now with logging of message contents.
 func Sender(_ context.Context, conn net.Conn, request []byte) error {
 	var l int
+	startTime := time.Now()
 
 	// Log the request being sent
 	log.Printf("SENDING REQUEST: %s", string(request))
@@ -124,8 +125,24 @@ func Sender(_ context.Context, conn net.Conn, request []byte) error {
 		return err
 	}
 
-	// Log the response received
-	log.Printf("RECEIVED RESPONSE: %s", string(buf))
+	// Calculate processing time
+	processingTime := time.Since(startTime)
+
+	// Format processing time based on its magnitude for better readability
+	var timeStr string
+	switch {
+	case processingTime < time.Microsecond:
+		timeStr = fmt.Sprintf("%.2f ns", float64(processingTime.Nanoseconds()))
+	case processingTime < time.Millisecond:
+		timeStr = fmt.Sprintf("%.2f µs", float64(processingTime.Nanoseconds())/1000)
+	case processingTime < time.Second:
+		timeStr = fmt.Sprintf("%.2f ms", float64(processingTime.Nanoseconds())/1000000)
+	default:
+		timeStr = fmt.Sprintf("%.2f s", processingTime.Seconds())
+	}
+
+	// Log the response received with processing time
+	log.Printf("RECEIVED RESPONSE: %s (processing time: %s)", string(buf), timeStr)
 
 	return nil
 }

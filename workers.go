@@ -6,8 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
-
-	"github.com/go-resty/resty/v2"
+	"net/http"
 )
 
 // Forward sends a message to a destination connection and reads the response.
@@ -67,7 +66,7 @@ func APIWorker(ctx context.Context, inMsg <-chan *[]byte, outErr chan<- error) c
 	outMsg := make(chan *[]byte, 1)
 
 	// Create HTTP client with common configuration
-	client := createRestClient()
+	client := createHTTPClient()
 
 	go func() {
 		defer close(outMsg)
@@ -98,13 +97,15 @@ func APIWorker(ctx context.Context, inMsg <-chan *[]byte, outErr chan<- error) c
 	return outMsg
 }
 
-// createRestClient creates a preconfigured REST client.
-func createRestClient() *resty.Client {
-	return resty.New().
-		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetHeader("User-Agent", "go-frwd/0.0.1").
-		SetHeader("Content-Type", "application/json").
-		SetBasicAuth(*Username, *Password)
+// createHTTPClient creates a preconfigured HTTP client.
+func createHTTPClient() *http.Client {
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+
+	return &http.Client{
+		Transport: transport,
+	}
 }
 
 // SourceSenderWorker sends responses back to the original client.
