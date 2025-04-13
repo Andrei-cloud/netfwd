@@ -13,11 +13,20 @@ func BenchmarkSender(b *testing.B) {
 	}{
 		{
 			"CSNQ request",
-			[]byte(`00264<XML><MessageType>0</MessageType><ProcCode>CSNQ</ProcCode><REFNUM>0220000245250</REFNUM><STAN>0220000245250</STAN><LocalTxnDtTime>2203221157</LocalTxnDtTime><DeliveryChannelCtrlID>ATM</DeliveryChannelCtrlID><PName>ACCOUNTNUMBER</PName><PValue>157336</PValue></XML>`),
+			[]byte(
+				`00264<XML><MessageType>0</MessageType><ProcCode>CSNQ</ProcCode>` +
+					`<REFNUM>0220000245250</REFNUM><STAN>0220000245250</STAN>` +
+					`<LocalTxnDtTime>2203221157</LocalTxnDtTime><DeliveryChannelCtrlID>ATM</DeliveryChannelCtrlID>` +
+					`<PName>ACCOUNTNUMBER</PName><PValue>157336</PValue></XML>`),
 		},
 		{
 			"CRNQ request",
-			[]byte(`00264<XML><MessageType>0</MessageType><ProcCode>CRNQ</ProcCode><REFNUM>0220000245250</REFNUM><STAN>0220000245250</STAN><LocalTxnDtTime>2203221157</LocalTxnDtTime><DeliveryChannelCtrlID>ATM</DeliveryChannelCtrlID><PName>ACCOUNTNUMBER</PName><PValue>157336</PValue></XML>`),
+			[]byte(
+				`00264<XML><MessageType>0</MessageType><ProcCode>CRNQ</ProcCode>` +
+					`<REFNUM>0220000245250</REFNUM><STAN>0220000245250</STAN>` +
+					`<LocalTxnDtTime>2203221157</LocalTxnDtTime><DeliveryChannelCtrlID>ATM</DeliveryChannelCtrlID>` +
+					`<PName>ACCOUNTNUMBER</PName><PValue>157336</PValue></XML>`,
+			),
 		},
 	}
 
@@ -29,10 +38,16 @@ func BenchmarkSender(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			defer conn.Close()
+			defer func() {
+				if err := conn.Close(); err != nil {
+					b.Errorf("failed to close connection: %v", err)
+				}
+			}()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				Sender(ctx, conn, tt.r)
+				if err := Sender(ctx, conn, tt.r); err != nil {
+					b.Errorf("Sender error: %v", err)
+				}
 			}
 			cancel()
 		})

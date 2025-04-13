@@ -5,7 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/url"
 	"os"
@@ -14,10 +14,14 @@ import (
 	"time"
 )
 
-//to minimize cleint coldstart
-var (
-	DestURL *url.URL
+// Application-wide constants
+const (
+	lengthSize = 5 // Size of message length prefix
+)
 
+// Command line flags
+var (
+	DestURL     *url.URL
 	ListenAddr  = flag.String("l", ":3000", "address to listen to")
 	DestPtr     = flag.String("d", "http://localhost:3030/", "HTTP destination endpoint")
 	Username    = flag.String("u", "ecms", "user name, mandatory")
@@ -25,60 +29,71 @@ var (
 	ForwardAddr = flag.String("f", ":9002", "address to passthrough")
 )
 
-const lengthSize int = 5
-
 func main() {
-	//defer profile.Start(profile.MemProfile).Stop()
+	// defer profile.Start(profile.MemProfile).Stop()
 
-	var err error
+	// Set up text logger with slog
+	textHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})
+	logger := slog.New(textHandler)
+	slog.SetDefault(logger)
+
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	flag.Parse()
 
-	err = checkInit()
-	if err != nil {
-		log.Fatal(err)
+	if err := checkInit(); err != nil {
+		slog.Error("Initialization error", "error", err)
+		os.Exit(1)
 	}
 
 	l, err := net.Listen("tcp", *ListenAddr)
 	if err != nil {
-		log.Fatalln(err)
+		slog.Error("Failed to listen", "address", *ListenAddr, "error", err)
+		os.Exit(1)
 	}
-	log.Printf("Listening on host: %s\n", *ListenAddr)
+	slog.Info("Listening", "host", *ListenAddr)
 
 	go Accepter(ctx, l)
 
+	// Handle graceful shutdown
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 
 	s := <-interrupt
-	log.Printf("received signal: %s", s.String())
+	slog.Info("Received signal", "signal", s.String())
 	cancel()
-	time.Sleep(time.Second)
+	time.Sleep(time.Second) // Allow time for cleanup
 }
 
+// checkInit validates command line arguments and initializes global variables
 func checkInit() error {
-	var err error
-
+	// Check mandatory fields
 	if *Username == "" || *Password == "" {
 		return errors.New("username and password must be provided")
 	}
 
 	if *DestPtr == "" {
-		return fmt.Errorf("destination http endpoint must be required")
+		return errors.New("destination HTTP endpoint is required")
 	}
 
+	// Parse and validate destination URL
+	var err error
 	DestURL, err = url.Parse(*DestPtr)
 	if err != nil {
-		return fmt.Errorf("invalid destination handler: %w", err)
-	}
-	_, _, err = net.SplitHostPort(*ListenAddr)
-	if err != nil {
-		return fmt.Errorf("incoming listen adress is invalid: %w", err)
+		return fmt.Errorf("invalid destination URL: %w", err)
 	}
 
-	_, _, err = net.SplitHostPort(*ForwardAddr)
-	if err != nil {
-		return fmt.Errorf("forward adress is invalid: %w", err)
+	// Validate listen address
+	if _, _, err = net.SplitHostPort(*ListenAddr); err != nil {
+		return fmt.Errorf("incoming listen address is invalid: %w", err)
+	}
+
+	// Validate forward address
+	if _, _, err = net.SplitHostPort(*ForwardAddr); err != nil {
+		return fmt.Errorf("forward address is invalid: %w", err)
 	}
 
 	return nil

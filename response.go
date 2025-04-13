@@ -6,6 +6,7 @@ import (
 	"fmt"
 )
 
+// ResponseXML represents the structure of outgoing XML responses
 type ResponseXML struct {
 	XMLName        xml.Name      `xml:"XML"`
 	MessageType    string        `xml:"MessageType"`
@@ -22,9 +23,12 @@ type ResponseXML struct {
 	RefNum         string        `xml:"REFNUM"`
 }
 
+// CustomersList represents a collection of customer records
 type CustomersList struct {
 	Records []Record `xml:"Record"`
 }
+
+// Record represents a customer record in the XML response
 type Record struct {
 	Name                   string `xml:"Name"`
 	FirstName              string `xml:"FirstName"`
@@ -55,11 +59,13 @@ type Record struct {
 	CustTypeFlag           string `xml:"CustTypeFlag"`
 }
 
+// ResponseJSON represents the structure of incoming JSON API responses
 type ResponseJSON struct {
 	Info      RequestInfo `json:"RequestInfo"`
 	Customers []Details   `json:"CustomerDetails"`
 }
 
+// Details represents a customer record in the JSON response
 type Details struct {
 	Qid                      string      `json:"QID"`
 	Baseno                   string      `json:"BASENO"`
@@ -74,13 +80,15 @@ type Details struct {
 	IsQANationalityWithdrawn bool        `json:"IsQANationalityWithdrawn"`
 }
 
+// ResponseJ2X transforms a JSON API response to an XML message
 func ResponseJ2X(res []byte) ([]byte, error) {
+	// Parse JSON response
 	jsonRes := &ResponseJSON{}
-	err := json.Unmarshal(res, jsonRes)
-	if nil != err {
-		return []byte{}, fmt.Errorf("requst xml unmarshal: %w", err)
+	if err := json.Unmarshal(res, jsonRes); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
+	// Transform to XML format
 	xmlRes := &ResponseXML{
 		MessageType:    "1",
 		ProcCode:       "CSNQ",
@@ -95,27 +103,27 @@ func ResponseJ2X(res []byte) ([]byte, error) {
 		RefNum:         jsonRes.Info.UserID,
 	}
 
-	records := make([]Record, 0)
-
+	// Transform customer records
+	records := make([]Record, 0, len(jsonRes.Customers))
 	for _, c := range jsonRes.Customers {
-		cust := Record{}
-		cust.Name = c.FirstName + " " + c.LastName
-		cust.FirstName = c.FirstName
-		cust.LastName = c.LastName
-		cust.BaseNumber = c.Baseno
-		cust.QID = c.Qid
-		cust.PassportNo = c.Passportno
-		cust.SMSMobile = c.Mobileno
-		cust.Email = c.Emailid
-
-		records = append(records, cust)
+		record := Record{
+			Name:       c.FirstName + " " + c.LastName,
+			FirstName:  c.FirstName,
+			LastName:   c.LastName,
+			BaseNumber: c.Baseno,
+			QID:        c.Qid,
+			PassportNo: c.Passportno,
+			SMSMobile:  c.Mobileno,
+			Email:      c.Emailid,
+		}
+		records = append(records, record)
 	}
-
 	xmlRes.Customers.Records = records
 
+	// Serialize to XML
 	result, err := xml.Marshal(xmlRes)
 	if err != nil {
-		return []byte{}, fmt.Errorf("requst xml unmarshal: %w", err)
+		return nil, fmt.Errorf("failed to serialize XML response: %w", err)
 	}
 
 	return result, nil

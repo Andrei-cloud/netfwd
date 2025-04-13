@@ -6,6 +6,7 @@ import (
 	"fmt"
 )
 
+// RequestXML represents the structure of incoming XML messages
 type RequestXML struct {
 	XMLName        xml.Name `xml:"XML"`
 	Text           string   `xml:",chardata"`
@@ -19,12 +20,14 @@ type RequestXML struct {
 	ParameterValue string   `xml:"PValue"`
 }
 
+// RequestJSON represents the structure of outgoing JSON API requests
 type RequestJSON struct {
 	Info           RequestInfo `json:"RequestInfo"`
 	ParameterName  string      `json:"searchparametername"`
 	ParameterValue string      `json:"searchparametervalue"`
 }
 
+// RequestInfo contains common request metadata
 type RequestInfo struct {
 	Stan        string `json:"requestId"`
 	UserID      string `json:"userId,omitempty"`
@@ -33,14 +36,15 @@ type RequestInfo struct {
 	RequestTime string `json:"requestTime"`
 }
 
+// RequestX2J transforms an XML message to a JSON API request
 func RequestX2J(req []byte) ([]byte, error) {
+	// Parse XML request
 	xmlReq := &RequestXML{}
-
-	err := xml.Unmarshal(req, xmlReq)
-	if err != nil {
-		return []byte{}, fmt.Errorf("request xml unmarshal: %w", err)
+	if err := xml.Unmarshal(req, xmlReq); err != nil {
+		return nil, fmt.Errorf("failed to parse XML request: %w", err)
 	}
 
+	// Transform to JSON format
 	jsonReq := &RequestJSON{
 		Info: RequestInfo{
 			Stan:        xmlReq.Stan,
@@ -52,9 +56,12 @@ func RequestX2J(req []byte) ([]byte, error) {
 		ParameterName:  "Baseno",
 		ParameterValue: xmlReq.ParameterValue,
 	}
+
+	// Serialize to JSON
 	result, err := json.Marshal(jsonReq)
-	if nil != err {
-		return []byte{}, fmt.Errorf("request json marshal: %w", err)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize JSON request: %w", err)
 	}
+
 	return result, nil
 }
